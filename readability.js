@@ -1,5 +1,6 @@
-function getScores(text) {
-// Manual rewrite of the textstat Python library (https://github.com/shivam5992/textstat/)
+var getScores = function(text) {
+
+  // Manual rewrite of the textstat Python library (https://github.com/shivam5992/textstat/)
 
   /* 
    * Regular expression to identify a sentence. No, it's not perfect. 
@@ -23,11 +24,13 @@ function getScores(text) {
     syllableThreshold: 3
   };
 
+  var cache = {};
+
   var punctuation = ['!','"','#','$','%','&','\'','(',')','*','+',',','-','.','/',':',';','<','=','>','?','@','[',']','^','_','`','{','|','}','~'];
 
-  var legacyRound = function(n, p) {
-    var k = Math.pow(10, (p || 0));
-    return Math.floor((n * k) + 0.5 * Math.sign(n)) /k;
+  var legacyRound = function(number, precision) {
+    var k = Math.pow(10, (precision || 0));
+    return Math.floor((number * k) + 0.5 * Math.sign(number)) / k;
   };
 
   var getGradeSuffix = function(grade) {
@@ -48,12 +51,10 @@ function getScores(text) {
     return 'th';
   };
 
-  var charCount = function(text, ignoreSpaces) {
-    if (ignoreSpaces === undefined) ignoreSpaces = true;
-    if (ignoreSpaces === true) {
-      text = text.replace(/\s/g, '');
-    }
-    return text.length;
+  var charCount = function(text) {
+    if (cache.charCount) return cache.charCount;
+    text = text.replace(/\s/g, '');
+    return cache.charCount = text.length;
   };
 
   var removePunctuation = function(text) {
@@ -62,34 +63,38 @@ function getScores(text) {
     }).join('');
   };
 
-  var letterCount = function(text, ignoreSpaces) {
-    if (ignoreSpaces === undefined) ignoreSpaces = true;
-    if (ignoreSpaces === true) {
-      text = text.replace(/\s/g, '');
-    }
+  var letterCount = function(text) {
+    text = text.replace(/\s/g, '');
     return removePunctuation(text).length;
   };
 
-  var lexiconCount = function(text, removePunct) {
-    if (removePunct === undefined) removePunct = true;
-    if (removePunct === true) {
-      text = removePunctuation(text);
-    }
-    return text.split(' ').length;
+  var lexiconCount = function(text, useCache) {
+    if (useCache && cache.lexiconCount) return cache.lexiconCount;
+    text = removePunctuation(text);
+    var lexicon = text.split(' ').length;
+    return useCache ? cache.lexiconCount = lexicon : lexicon;
   };
 
-  var syllableCount = function(text) {
-    var count = 0;
+  var getWords = function(text, useCache) {
+    if (useCache && cache.getWords) return cache.getWords;
     text = text.toLowerCase();
     text = removePunctuation(text);
-    return text.split(' ').reduce(function(a, c) {  
+    var words = text.split(' ');
+    return useCache ? cache.getWords = words : words;
+  }
+
+  var syllableCount = function(text, useCache) {
+    if (useCache && cache.syllableCount) return cache.syllableCount;
+    var count = 0;
+    var syllables = getWords(text, useCache).reduce(function(a, c) {  
       return a + (c.match(syllableRegex) || [1]).length;
     }, 0);
+    return useCache ? cache.syllableCount = syllables : syllables;
   };
 
-  var polySyllableCount = function(text) {
+  var polySyllableCount = function(text, useCache) {
     var count = 0;
-    text.split(' ').forEach(function(word) {
+    getWords(text, useCache).forEach(function(word) {
       var syllables = syllableCount(word);
       if (syllables >= 3) {
         count += 1;
@@ -98,37 +103,39 @@ function getScores(text) {
     return count;
   };
 
-  var sentenceCount = function(text) {
+  var sentenceCount = function(text, useCache) {
+    if (useCache && cache.sentenceCount) return cache.sentenceCount;
     var ignoreCount = 0;
     var sentences = text.split(sentenceRegex);
     sentences.forEach(function(s) {
-      if (lexiconCount(s) <= 2) { ignoreCount += 1; }
+      if (lexiconCount(s, true, false) <= 2) { ignoreCount += 1; }
     });
-    return Math.max(1, sentences.length - ignoreCount);
+    var count = Math.max(1, sentences.length - ignoreCount);
+    return useCache ? cache.sentenceCount = count : count;
   };
 
   var avgSentenceLength = function(text) {
-    var avg = lexiconCount(text) / sentenceCount(text);
+    var avg = lexiconCount(text, true) / sentenceCount(text, true);
     return legacyRound(avg, 2);
   };
 
   var avgSyllablesPerWord = function(text) {
-    var avg = syllableCount(text) / lexiconCount(text);
+    var avg = syllableCount(text, true) / lexiconCount(text, true);
     return legacyRound(avg, 2);
   };
 
   var avgCharactersPerWord = function(text) {
-    var avg = charCount(text) / lexiconCount(text);
+    var avg = charCount(text) / lexiconCount(text, true);
     return legacyRound(avg, 2);
   };
 
   var avgLettersPerWord = function(text) {
-    var avg = letterCount(text) / lexiconCount(text);
+    var avg = letterCount(text, true) / lexiconCount(text, true);
     return legacyRound(avg, 2);
   };
 
   var avgSentencesPerWord = function(text) {
-    var avg = sentenceCount(text) / lexiconCount(text);
+    var avg = sentenceCount(text, true) / lexiconCount(text, true);
     return legacyRound(avg, 2);
   };
 
@@ -155,9 +162,9 @@ function getScores(text) {
   };
 
   var smogIndex = function(text) {
-    var sentences = sentenceCount(text);
+    var sentences = sentenceCount(text, true);
     if (sentences >= 3) {
-      var polySyllables = polySyllableCount(text);
+      var polySyllables = polySyllableCount(text, true);
       var smog = 1.043 * (Math.pow(polySyllables * (30 / sentences), 0.5)) + 3.1291;
       return legacyRound(smog, 2);
     }
@@ -173,8 +180,8 @@ function getScores(text) {
 
   var automatedReadabilityIndex = function(text) {
     var chars = charCount(text);
-    var words = lexiconCount(text);
-    var sentences = sentenceCount(text);
+    var words = lexiconCount(text, true);
+    var sentences = sentenceCount(text, true);
     var a = chars / words;
     var b = words / sentences;
     var readability = (
@@ -182,15 +189,14 @@ function getScores(text) {
       0.5 * legacyRound(b, 2) -
       21.43
     );
-    return legacyRound(readability, 2);
+    return legacyRound(readability, 2); 
   };
 
   var linsearWriteFormula = function(text) {
     var easyWord = 0;
     var difficultWord = 0;
     var roughTextFirst100 = text.split(' ').slice(0,100).join(' ');
-    var plainText = removePunctuation(text);
-    var plainTextListFirst100 = plainText.split(' ').slice(0,100);
+    var plainTextListFirst100 = getWords(text, true).slice(0,100);
     plainTextListFirst100.forEach(function(word) {
       if (syllableCount(word) < 3) {
         easyWord += 1;
@@ -206,18 +212,17 @@ function getScores(text) {
   };
 
   var rix = function(text) {
-    var plainText = removePunctuation(text);
-    var words = plainText.split(' ');
+    var words = getWords(text, true);
     var longCount = words.filter(function(word) {
       return word.length > 6;
     }).length;
-    var sentencesCount = sentenceCount(text);
+    var sentencesCount = sentenceCount(text, true);
     return legacyRound(longCount / sentencesCount, 2);
   };
 
   var readingTime = function(text) {
     var wordsPerSecond = 4.17;
-    return legacyRound(lexiconCount(text) / wordsPerSecond, 2);
+    return legacyRound(lexiconCount(text, true) / wordsPerSecond, 2);
   };
 
   // Build textStandard

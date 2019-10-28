@@ -1,12 +1,19 @@
 var getScores = function(text) {
 
+  /* 
+   * To speed the script up, you can set a sampling rate in words. For example, if you set
+   * sampleLimit to 1000, only the first 1000 words will be parsed from the input text.
+   * Set to 0 to never sample.
+   */     
+  var sampleLimit = 1000;
+
   // Manual rewrite of the textstat Python library (https://github.com/shivam5992/textstat/)
 
   /* 
    * Regular expression to identify a sentence. No, it's not perfect. 
    * Fails e.g. with abbreviations and similar constructs mid-sentence.
    */
-  var sentenceRegex = new RegExp('[.?!]\\s', 'g');
+  var sentenceRegex = new RegExp('[.?!]\\s[^a-z]', 'g');
 
   /*
    * Regular expression to identify a syllable. No, it's not perfect either.
@@ -33,26 +40,9 @@ var getScores = function(text) {
     return Math.floor((number * k) + 0.5 * Math.sign(number)) / k;
   };
 
-  var getGradeSuffix = function(grade) {
-    var ordinalMap = {
-      1: 'st', 
-      2: 'nd', 
-      3: 'rd'
-    };
-    var teensMap = {
-      11: 'th',
-      12: 'th',
-      13: 'th'
-    };
-    var grade = grade % 100;
-    if (grade in teensMap) { return teensMap[grade]; }
-    grade = grade % 10;
-    if (grade in ordinalMap) { return ordinalMap[grade]; }
-    return 'th';
-  };
-
   var charCount = function(text) {
     if (cache.charCount) return cache.charCount;
+    if (sampleLimit > 0) text = text.split(' ').slice(0, sampleLimit).join(' ');
     text = text.replace(/\s/g, '');
     return cache.charCount = text.length;
   };
@@ -64,12 +54,14 @@ var getScores = function(text) {
   };
 
   var letterCount = function(text) {
+    if (sampleLimit > 0) text = text.split(' ').slice(0, sampleLimit).join(' ');
     text = text.replace(/\s/g, '');
     return removePunctuation(text).length;
   };
 
-  var lexiconCount = function(text, useCache) {
+  var lexiconCount = function(text, useCache, ignoreSample) {
     if (useCache && cache.lexiconCount) return cache.lexiconCount;
+    if (ignoreSample !== true && sampleLimit > 0) text = text.split(' ').slice(0, sampleLimit).join(' ');
     text = removePunctuation(text);
     var lexicon = text.split(' ').length;
     return useCache ? cache.lexiconCount = lexicon : lexicon;
@@ -77,6 +69,7 @@ var getScores = function(text) {
 
   var getWords = function(text, useCache) {
     if (useCache && cache.getWords) return cache.getWords;
+    if (sampleLimit > 0) text = text.split(' ').slice(0, sampleLimit).join(' ');
     text = text.toLowerCase();
     text = removePunctuation(text);
     var words = text.split(' ');
@@ -105,6 +98,7 @@ var getScores = function(text) {
 
   var sentenceCount = function(text, useCache) {
     if (useCache && cache.sentenceCount) return cache.sentenceCount;
+    if (sampleLimit > 0) text = text.split(' ').slice(0, sampleLimit).join(' ');
     var ignoreCount = 0;
     var sentences = text.split(sentenceRegex);
     sentences.forEach(function(s) {
@@ -222,7 +216,8 @@ var getScores = function(text) {
 
   var readingTime = function(text) {
     var wordsPerSecond = 4.17;
-    return legacyRound(lexiconCount(text, true) / wordsPerSecond, 2);
+    // To get full reading time, ignore cache and sample
+    return legacyRound(lexiconCount(text, false, true) / wordsPerSecond, 2);
   };
 
   // Build textStandard
@@ -253,27 +248,27 @@ var getScores = function(text) {
 
     // FK
     var fk = obj.fleschKincaidGrade = fleschKincaidGrade(text);
-    grade.push(legacyRound(fk));
+    grade.push(Math.floor(fk));
     grade.push(Math.ceil(fk));
 
     // SMOG
     var smog = obj.smogIndex = smogIndex(text);
-    grade.push(legacyRound(smog));
+    grade.push(Math.floor(smog));
     grade.push(Math.ceil(smog));
 
     // CL
     var cl = obj.colemanLiauIndex = colemanLiauIndex(text);
-    grade.push(legacyRound(cl));
+    grade.push(Math.floor(cl));
     grade.push(Math.ceil(cl));
 
     // ARI
     var ari = obj.automatedReadabilityIndex = automatedReadabilityIndex(text);
-    grade.push(legacyRound(ari));
+    grade.push(Math.floor(ari));
     grade.push(Math.ceil(ari));
 
     // LWF
     var lwf = obj.linsearWriteFormula = linsearWriteFormula(text);
-    grade.push(legacyRound(lwf));
+    grade.push(Math.floor(lwf));
     grade.push(Math.ceil(lwf));
 
     // RIX
@@ -314,7 +309,7 @@ var getScores = function(text) {
       grade[midPoint] : 
       (grade[midPoint-1] + grade[midPoint]) / 2.0
     );
-    obj.medianGrade = medianGrade + getGradeSuffix(medianGrade);
+    obj.medianGrade = medianGrade;
 
   })();
 

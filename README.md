@@ -28,7 +28,7 @@ would look like this:
   fleschKincaidGrade: 8.28,
   fleschReadingEase: 68.18,
   linsearWriteFormula: 11.38,
-  medianGrade: "9th",
+  medianGrade: 9,
   readingTime: 17.51,
   rix: 3,
   smogIndex: 11.7
